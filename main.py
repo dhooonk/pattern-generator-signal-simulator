@@ -24,8 +24,10 @@ from tkinter import ttk
 import sys
 import os
 
-# src 폴더를 모듈 검색 경로에 추가
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# 모듈 검색 경로 추가 (src: UI, core: 핵심 로직, utils: 입출력 유틸)
+_base = os.path.dirname(__file__)
+for _pkg in ('src', 'core', 'utils'):
+    sys.path.append(os.path.join(_base, _pkg))
 
 from signal_model import SignalManager, SignalStorage
 from sync_data import SyncDataManager
