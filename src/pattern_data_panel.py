@@ -59,7 +59,7 @@ class PatternDataPanel(tk.Frame):
         btn_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=3)
 
         btn_cfg = dict(bg='#e8e8e8', fg='#333333', font=('Arial', 9),
-                       relief=tk.GROOVE, borderwidth=1, width=10)
+                       relief=tk.RAISED, borderwidth=2)
         tk.Button(btn_frame, text="추가",     command=self._on_add,    **btn_cfg).pack(side=tk.LEFT, padx=2)
         tk.Button(btn_frame, text="수정",     command=self._on_edit,   **btn_cfg).pack(side=tk.LEFT, padx=2)
         tk.Button(btn_frame, text="삭제",     command=self._on_delete, **btn_cfg).pack(side=tk.LEFT, padx=2)

@@ -76,7 +76,6 @@ def _format_us(us: float) -> str:
 # ────────────────────────────────────────────────────────────────
 
 def _compute_segments(sync_data_us: float, signals: List[Dict],
-                      max_segs: int = 32,
                       n_frames: int = 2) -> List[Tuple[float, float, str]]:
     """
     신호 타이밍 경계점 기반 구간 분할
@@ -89,14 +88,11 @@ def _compute_segments(sync_data_us: float, signals: List[Dict],
          - period 경계: 다음 주기가 시작되는 지점
          - 프레임 경계(sync_data_us, 2×sync_data_us)도 breakpoint로 추가
       3. 수집한 breakpoints를 정렬 → 인접 쌍을 구간([start, end])으로 변환
-      4. 구간 수 > max_segs 이면 가장 짧은 인접 구간을 반복 병합
-         → 항상 max_segs 이하 구간으로 압축
-      5. 각 구간에 "Seg1", "Seg2", ... 라벨 부여
+      4. 각 구간에 "Seg1", "Seg2", ... 라벨 부여 (구간 수 제한 없음)
 
     Args:
         sync_data_us: 1 frame 길이(us)
         signals: 신호 파라미터 딕셔너리 리스트
-        max_segs: 최대 구간 수 (초과 시 병합)
         n_frames: 표시할 최소 프레임 수 (기본 2)
 
     Returns:
@@ -124,18 +120,6 @@ def _compute_segments(sync_data_us: float, signals: List[Dict],
 
     sorted_bps = sorted(breakpoints)
     raw = list(zip(sorted_bps[:-1], sorted_bps[1:]))
-
-    # 구간 수 초과 시: 가장 짧은 인접 구간 반복 병합
-    while len(raw) > max_segs:
-        durs = [e - s for s, e in raw]
-        idx  = durs.index(min(durs))
-        if idx + 1 < len(raw):
-            s1, _ = raw[idx]
-            _, e2 = raw[idx + 1]
-            raw = raw[:idx] + [(s1, e2)] + raw[idx + 2:]
-        else:
-            break
-
     return [(s, e, f"Seg{i+1}") for i, (s, e) in enumerate(raw)]
 
 
@@ -237,8 +221,8 @@ class ExcelWaveformExporter:
 
             self._draw_sheet(ws, visible, sync_data_us, model_name)
 
-        self._apply_shapes_to_worksheets(wb)
         wb.save(filepath)
+        self._inject_drawings_zipfile(filepath, wb)
         return True
 
     def export(self, filepath: str, signals: List[Dict],
@@ -263,8 +247,8 @@ class ExcelWaveformExporter:
 
         self._draw_sheet(ws, signals, sync_data_us, model_name)
 
-        self._apply_shapes_to_worksheets(wb)
         wb.save(filepath)
+        self._inject_drawings_zipfile(filepath, wb)
         return True
 
     def _draw_sheet(self, ws, signals: List[Dict],
@@ -275,12 +259,12 @@ class ExcelWaveformExporter:
 
         ws.sheet_view.zoomScale = ZOOM_PERCENT
 
-        # ── 구간 계산 (최소 2 frame 표시) ─────────────────────────
+        # ── 구간 계산 (최소 2 frame, 구간 수 제한 없음) ──────────
         segments = _compute_segments(sync_data_us, signals, n_frames=2)
         n_segs   = len(segments)
         total_us = sync_data_us * 2   # 2 frame 기준 전체 시간
 
-        TOTAL_WAVE_COLS = min(n_segs * 10, 160)
+        TOTAL_WAVE_COLS = n_segs * 10
         seg_cols = []
         for s, e, _ in segments:
             ratio = (e - s) / total_us if total_us > 0 else 1 / n_segs
@@ -652,34 +636,104 @@ class ExcelWaveformExporter:
             self._pending_shapes[sheet_title].append(textbox)
             self._shape_id_counter[sheet_title] += 1
 
-    def _apply_shapes_to_worksheets(self, wb) -> None:
+    def _inject_drawings_zipfile(self, filepath: str, wb) -> None:
         """
-        openpyxl SpreadsheetDrawing을 사용하여 도형을 워크시트에 직접 추가.
-        wb.save() 전에 호출해야 openpyxl이 drawing을 포함하여 저장함.
-        zipfile 후처리 불필요.
+        wb.save() 이후 xlsx를 zipfile로 열어 타이밍 화살표 도형을 주입.
+
+        SpreadsheetDrawing.__bool__ 이 charts/images만 검사하여 빈 drawing을
+        save 시 무시하므로, save 이후 직접 drawing XML, rels, Content_Types를 추가.
         """
+        import zipfile
+        import os
+
         if not self._pending_shapes:
             return
 
-        from openpyxl.drawing.spreadsheet_drawing import SpreadsheetDrawing
-        try:
-            from lxml import etree as _et
-        except ImportError:
-            import xml.etree.ElementTree as _et  # type: ignore
-
         XDR_NS = 'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing'
         A_NS   = 'http://schemas.openxmlformats.org/drawingml/2006/main'
-        R_NS   = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+        R_NS_OFF = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+        PKG_NS  = 'http://schemas.openxmlformats.org/package/2006/relationships'
+        DR_TYPE = f'{R_NS_OFF}/drawing'
+        DR_CT   = 'application/vnd.openxmlformats-officedocument.drawing+xml'
 
+        # 주입할 시트 목록: (ws.path, title, drawing_index)
+        to_inject = []
+        drawing_idx = 0
         for ws in wb.worksheets:
-            shapes = self._pending_shapes.get(ws.title)
-            if not shapes:
-                continue
-            drawing_xml = (
-                f'<xdr:wsDr xmlns:xdr="{XDR_NS}" xmlns:a="{A_NS}" xmlns:r="{R_NS}">'
-                + ''.join(shapes)
-                + '</xdr:wsDr>'
-            )
-            drawing = SpreadsheetDrawing()
-            drawing._element = _et.fromstring(drawing_xml.encode('utf-8'))
-            ws._drawing = drawing
+            if ws.title in self._pending_shapes:
+                drawing_idx += 1
+                to_inject.append((ws.path, ws.title, drawing_idx))
+
+        if not to_inject:
+            return
+
+        tmp = filepath + '._tmp'
+        try:
+            with zipfile.ZipFile(filepath, 'r') as zin:
+                all_names = set(zin.namelist())
+                files = {name: zin.read(name) for name in all_names}
+
+            # 각 시트에 drawing 주입
+            ct_overrides = []
+            for ws_path, title, didx in to_inject:
+                shapes = self._pending_shapes[title]
+                sheet_file   = ws_path.lstrip('/')          # 'xl/worksheets/sheet1.xml'
+                sheet_name   = os.path.basename(sheet_file) # 'sheet1.xml'
+                rels_file    = f'xl/worksheets/_rels/{sheet_name}.rels'
+                drawing_file = f'xl/drawings/drawing{didx}.xml'
+                rel_id       = f'rId_d{didx}'
+
+                # ① drawing XML
+                drawing_xml = (
+                    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    f'<xdr:wsDr xmlns:xdr="{XDR_NS}" xmlns:a="{A_NS}" xmlns:r="{R_NS_OFF}">'
+                    + ''.join(shapes)
+                    + '</xdr:wsDr>'
+                ).encode('utf-8')
+                files[drawing_file] = drawing_xml
+
+                # ② worksheet rels (기존 파일이 있으면 Relationship 추가, 없으면 신규 생성)
+                new_rel = (f'<Relationship Id="{rel_id}" '
+                           f'Type="{DR_TYPE}" '
+                           f'Target="../drawings/drawing{didx}.xml"/>')
+                if rels_file in files:
+                    rels_str = files[rels_file].decode('utf-8')
+                    rels_str = rels_str.replace('</Relationships>', new_rel + '</Relationships>')
+                else:
+                    rels_str = (
+                        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                        f'<Relationships xmlns="{PKG_NS}">{new_rel}</Relationships>'
+                    )
+                files[rels_file] = rels_str.encode('utf-8')
+
+                # ③ 시트 XML에 <drawing r:id="..."/> 삽입 (</worksheet> 직전)
+                sheet_str = files[sheet_file].decode('utf-8')
+                drawing_tag = f'<drawing r:id="{rel_id}"/>'
+                if drawing_tag not in sheet_str:
+                    sheet_str = sheet_str.replace('</worksheet>',
+                                                  drawing_tag + '</worksheet>')
+                files[sheet_file] = sheet_str.encode('utf-8')
+
+                # ④ Content_Types.xml용 Override 수집
+                ct_overrides.append(
+                    f'<Override PartName="/{drawing_file}" ContentType="{DR_CT}"/>'
+                )
+
+            # ④ Content_Types.xml 갱신
+            ct_str = files['[Content_Types].xml'].decode('utf-8')
+            for override in ct_overrides:
+                if override not in ct_str:
+                    ct_str = ct_str.replace('</Types>', override + '</Types>')
+            files['[Content_Types].xml'] = ct_str.encode('utf-8')
+
+            # 전체 파일을 새 zipfile로 저장
+            with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zout:
+                for name, data in files.items():
+                    zout.writestr(name, data)
+
+            os.replace(tmp, filepath)
+
+        except Exception:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise

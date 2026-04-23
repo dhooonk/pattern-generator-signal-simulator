@@ -166,15 +166,12 @@ class SignalTableWidget(tk.Frame):
         """16×16 단색 PhotoImage 생성 및 캐시 반환"""
         if color_hex not in self._color_images:
             try:
-                r = int(color_hex[1:3], 16)
-                g = int(color_hex[3:5], 16)
-                b = int(color_hex[5:7], 16)
+                normalized = color_hex if color_hex.startswith('#') else f'#{color_hex}'
+                int(normalized[1:], 16)  # 유효성 검사
             except (ValueError, IndexError):
-                r, g, b = 0, 0, 255
+                normalized = '#0000ff'
             img = tk.PhotoImage(width=16, height=16)
-            hex_color = f'#{r:02x}{g:02x}{b:02x}'
-            row = '{' + (f'{hex_color} ' * 16).strip() + '}'
-            img.put(' '.join([row] * 16))
+            img.put(normalized, to=(0, 0, 16, 16))
             self._color_images[color_hex] = img
         return self._color_images[color_hex]
 
