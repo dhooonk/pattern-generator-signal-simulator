@@ -51,6 +51,10 @@ class ControlPanel(tk.Frame):
 
         self._setup_ui()
 
+        if self.model_store:
+            self.model_store.add_listener(self._on_model_changed)
+            self._on_model_changed()  # 초기값 반영
+
     def _setup_ui(self):
         """UI 구성 — 1줄 컴팩트 Toolbar"""
 
@@ -98,6 +102,20 @@ class ControlPanel(tk.Frame):
         self.view_time_entry.pack(side=tk.LEFT, padx=(2, 0))
         self.view_time_entry.bind('<Return>',   self._on_view_time_changed)
         self.view_time_entry.bind('<FocusOut>', self._on_view_time_changed)
+
+        # PG Data 정보 표시: SyncData / Frequency
+        tk.Label(row1, text='|', bg=section_bg, fg='#bbbbbb',
+                 font=('Arial', 10)).pack(side=tk.LEFT, padx=8)
+        tk.Label(row1, text='SyncData:', **label_kw).pack(side=tk.LEFT)
+        self._sync_lbl = tk.Label(row1, text='-- us', width=12,
+                                   bg='#ffffff', fg='#1a1a1a',
+                                   font=('Arial', 8), relief=tk.SUNKEN, bd=1)
+        self._sync_lbl.pack(side=tk.LEFT, padx=(2, 8))
+        tk.Label(row1, text='Freq:', **label_kw).pack(side=tk.LEFT)
+        self._freq_lbl = tk.Label(row1, text='-- Hz', width=10,
+                                   bg='#ffffff', fg='#1a1a1a',
+                                   font=('Arial', 8), relief=tk.SUNKEN, bd=1)
+        self._freq_lbl.pack(side=tk.LEFT, padx=2)
 
         _sep()
 
@@ -162,6 +180,16 @@ class ControlPanel(tk.Frame):
                       font=('Arial', 8),
                       relief=tk.RAISED, bd=2, padx=6, pady=3,
                       cursor='hand2').pack(side=tk.LEFT, padx=2)
+
+    def _on_model_changed(self):
+        """모델 변경 시 SyncData/Frequency 레이블 갱신"""
+        md = self.model_store.current_model if self.model_store else None
+        if md:
+            self._sync_lbl.config(text=f'{md.sync_data_us:.1f} us')
+            self._freq_lbl.config(text=f'{md.frequency_hz:.1f} Hz')
+        else:
+            self._sync_lbl.config(text='-- us')
+            self._freq_lbl.config(text='-- Hz')
 
     # ──────────────────────────────────────────────────────────────
     # 뷰 제어 핸들러
@@ -678,7 +706,7 @@ class ControlPanel(tk.Frame):
         ws.row_dimensions[40].height = 18
 
         ws.merge_cells('A39:S39')
-        sep = ws.cell(row=39, column=1, value='=== PATTERN DATA ===')
+        sep = ws.cell(row=39, column=1, value=' === PATTERN DATA ===')
         sep.font      = Font(bold=True, size=9, color='FFFFFFFF')
         sep.fill      = PatternFill('solid', fgColor='FF8E44AD')
         sep.alignment = center

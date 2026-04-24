@@ -263,6 +263,12 @@ class SignalManager:
         self._signals.clear()
         self._notify_listeners()
 
+    def load_signals(self, signals: List['Signal']):
+        """신호 목록을 한 번에 교체하고 notify 1회만 발생 (깜빡임 방지)"""
+        self._signals.clear()
+        self._signals.extend(signals)
+        self._notify_listeners()
+
     # ── 조회 ─────────────────────────────────────────────
 
     def get_signal(self, index: int) -> 'Signal':

@@ -170,19 +170,20 @@ class ModelListPanel(tk.Frame):
         # ModelStore의 현재 인덱스만 업데이트 (notify 없이)
         self.model_store._current_idx = idx
 
-        # ── 신호 목록 갱신 ────────────────────────────────────────
+        # ── 신호 목록 갱신 (일괄 교체 → notify 1회, 깜빡임 방지) ─
         from signal_model import Signal
-        self.signal_manager.clear_signals()
+        signals_to_load = []
         for sig in model.signals:
             if isinstance(sig, Signal):
                 if _is_zero_signal(sig):
                     sig.visible = False
-                self.signal_manager.add_signal(sig)
+                signals_to_load.append(sig)
             elif isinstance(sig, dict):
                 s = Signal.from_dict(sig)
                 if _is_zero_signal(s):
                     s.visible = False
-                self.signal_manager.add_signal(s)
+                signals_to_load.append(s)
+        self.signal_manager.load_signals(signals_to_load)
 
         # ── 패턴 데이터 갱신 ──────────────────────────────────────
         if self.pattern_data_panel is not None:

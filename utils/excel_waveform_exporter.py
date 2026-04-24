@@ -708,6 +708,12 @@ class ExcelWaveformExporter:
 
                 # ③ 시트 XML에 <drawing r:id="..."/> 삽입 (</worksheet> 직전)
                 sheet_str = files[sheet_file].decode('utf-8')
+                # openpyxl이 xmlns:r를 생략하는 경우 직접 선언 추가
+                if 'xmlns:r=' not in sheet_str[:600]:
+                    sheet_str = sheet_str.replace(
+                        '<worksheet ',
+                        f'<worksheet xmlns:r="{R_NS_OFF}" '
+                    )
                 drawing_tag = f'<drawing r:id="{rel_id}"/>'
                 if drawing_tag not in sheet_str:
                     sheet_str = sheet_str.replace('</worksheet>',
