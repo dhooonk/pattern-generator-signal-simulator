@@ -18,6 +18,7 @@ env/
 dist/
 build/
 *.spec
+!tosg-pattern-viewer.spec
 *.exe
 
 # 아카이브

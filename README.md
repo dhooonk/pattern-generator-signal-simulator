@@ -75,8 +75,8 @@ TFT 패널 구동 신호 검토 시간을 단축합니다.
 tosg-pattern-viewer/
 ├── main.py                         # 메인 애플리케이션 진입점
 ├── requirements.txt                # 의존성 목록
-├── setup.py                        # 패키지 설치 설정
-├── build_exe.bat                   # Windows 실행 파일 빌드 스크립트
+├── tosg-pattern-viewer.spec        # PyInstaller 빌드 스펙
+├── tosg-pattern-viewer.ico         # 실행 파일 아이콘
 ├── README.md
 ├── REQUIREMENTS.md                 # 기능 요구사항 명세
 │
@@ -139,8 +139,11 @@ python main.py
 ### Windows 실행 파일 빌드
 
 ```bat
-build_exe.bat
+pip install pyinstaller
+pyinstaller tosg-pattern-viewer.spec
 ```
+
+빌드 산출물: `dist/tosg-pattern-viewer.exe` (단일 실행 파일, 아이콘 포함)
 
 ## 사용법
 
@@ -177,6 +180,7 @@ build_exe.bat
 | 버전 | 날짜 | 내용 |
 |------|------|------|
 | v1.0.0 | 2026-04-21 | 초기 릴리즈 — 다중 모델, OTD/Excel 입출력, 타이밍 다이어그램 |
+| v1.0.1 | 2026-05-05 | PyInstaller spec 도입 — Windows 단일 실행 파일 빌드 (아이콘 포함) |
 
 ## 문의
 
